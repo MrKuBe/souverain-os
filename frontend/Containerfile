@@ -1,0 +1,42 @@
+# SouverainOS — image frontend OCI.
+# Cible `dev` : hot-reload, utilisée par compose.yaml.
+# Cible `runner` : production Next.js standalone, sans aucune dépendance Vercel.
+# Build production :
+#   podman build --target runner \
+#     --build-arg NEXT_PUBLIC_API_URL=https://souverainos.example.fr \
+#     -t souverainos-frontend ./frontend
+
+FROM node:20-alpine AS base
+RUN apk add --no-cache libc6-compat
+WORKDIR /app
+ENV NEXT_TELEMETRY_DISABLED=1
+
+FROM base AS deps
+COPY package.json package-lock.json* ./
+RUN if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi
+
+FROM deps AS dev
+COPY . .
+EXPOSE 3000
+CMD ["npm", "run", "dev"]
+
+FROM base AS builder
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+ARG NEXT_PUBLIC_API_URL=http://localhost:8000
+ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL} \
+    NODE_ENV=production
+RUN npm run build
+
+FROM base AS runner
+ENV NODE_ENV=production \
+    PORT=3000 \
+    HOSTNAME=0.0.0.0
+RUN addgroup --system --gid 1001 nodejs \
+    && adduser --system --uid 1001 nextjs
+COPY --from=builder /app/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+USER nextjs
+EXPOSE 3000
+CMD ["node", "server.js"]

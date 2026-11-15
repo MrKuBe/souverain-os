@@ -1,0 +1,34 @@
+# SouverainOS — image backend OCI (production et dev hot-reload).
+# Build production : podman build -t souverainos-backend ./backend
+# En dev, compose.yaml monte ./backend sur /app et remplace la commande
+# par uvicorn --reload ; les dépendances restent installées dans l'image.
+
+FROM python:3.12-slim AS runtime
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+WORKDIR /app
+
+RUN groupadd --system --gid 10001 app \
+    && useradd --system --uid 10001 --gid app --home-dir /app --no-create-home app
+
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY app ./app
+
+RUN chown -R app:app /app
+
+USER app
+
+EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=5 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3)"
+
+# Derrière un reverse proxy, ajouter --proxy-headers et --forwarded-allow-ips
+# avec l'adresse exacte du proxy (ne jamais faire confiance à toutes les IP).
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
