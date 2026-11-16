@@ -7,9 +7,9 @@
 
 > Projet imaginé et conçu par **Bertrand Kuzbinski** (Responsable des Systèmes Numériques /
 > Chef de Service Informatique hospitalier), dans le cadre de sa thèse professionnelle.
-> Développé en **Vibecoding — Full-Stack Open Source**, avec l'assistance d'un **modèle de
-> langage Open Weight** (poids ouverts). Les choix de conception, les règles métier et la
-> validation finale restent humains.
+> Développé en **Vibecoding — Full-Stack Open Source** avec **OpenCode**, et l'assistance
+> d'un **modèle de langage Open Weight** (poids ouverts). Les choix de conception, les
+> règles métier et la validation finale restent humains.
 
 SouverainOS mesure la dépendance numérique d'un Groupement Hospitalier de Territoire (GHT)
 à partir d'une cartographie applicative en trois couches : **Infrastructure (25 %)**,
