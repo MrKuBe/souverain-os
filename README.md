@@ -7,7 +7,9 @@
 
 > Projet imaginé et conçu par **Bertrand Kuzbinski** (Responsable des Systèmes Numériques /
 > Chef de Service Informatique hospitalier), dans le cadre de sa thèse professionnelle.
-> Développé en **Vibecoding — Full-Stack Open Source**.
+> Développé en **Vibecoding — Full-Stack Open Source**, avec l'assistance d'un **modèle de
+> langage Open Weight** (poids ouverts). Les choix de conception, les règles métier et la
+> validation finale restent humains.
 
 SouverainOS mesure la dépendance numérique d'un Groupement Hospitalier de Territoire (GHT)
 à partir d'une cartographie applicative en trois couches : **Infrastructure (25 %)**,
@@ -82,6 +84,24 @@ La logique officielle est implémentée **uniquement** dans
 `backend/app/services/scoring.py` et détaillée dans `AGENTS.md`. Le frontend ne recalcule
 jamais un score : il affiche les valeurs de l'API.
 
+### Démarche d'audit
+
+La méthode suit cinq étapes reproductibles :
+
+1. **Délimiter le périmètre** : établissements du GHT, applications, services rendus et
+   responsabilités internes.
+2. **Cartographier les briques** : identité, éditeur, technologie, hébergement, couche
+   fonctionnelle et statut de validation.
+3. **Qualifier chaque brique** sur les cinq critères, en conservant la preuve ou la source
+   de chaque notation (contrat, fiche éditeur, SILL/DINUM, DICP, analyse technique).
+4. **Calculer et prioriser** : score unitaire, score par couche, score global et top des
+   vulnérabilités.
+5. **Simuler et décider** : trajectoire What-If pour mesurer l'effet d'un remplacement ou
+   d'une réduction de dépendance, sans modifier l'audit.
+
+Les imports Mercator, CSV et JSON ne produisent qu'un **pré-scoring heuristique** avec le
+statut « À valider ». La qualification définitive relève d'un auditeur humain.
+
 ### Les cinq critères
 
 | Code | Dimension | Échelle | Références principales |
@@ -119,9 +139,16 @@ sont renormalisés.
 | 51–75 | Dépendance élevée |
 | 76–100 | Verrouillage critique / Risque systémique |
 
+### Limites d'interprétation
+
+Le score est un **indicateur d'aide à la décision**, pas une certification de conformité,
+une mesure de sécurité ou un jugement automatique sur un éditeur. Il dépend du périmètre
+retenu, de la qualité des preuves et de la date de l'audit. Deux audits ne sont comparables
+que si leur périmètre, leurs règles de notation et leur niveau de complétude sont
+explicitement rapprochés.
+
 La fiche **Méthodologie & Sources** de l'interface reprend les formules, les seuils, les
-sources et les limites d'interprétation. Elle est accessible au clavier et sans appel
-réseau.
+sources et ces limites. Elle est accessible au clavier et sans appel réseau.
 
 ## Import Mercator, CSV et JSON
 
