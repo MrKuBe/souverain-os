@@ -1,0 +1,11 @@
+# Override Podman rootless : mappe l'utilisateur courant dans les conteneurs
+# applicatifs et conserve les labels SELinux privés (`:Z`) de compose.yaml.
+#
+#   podman compose -f compose.yaml -f compose.rootless.yaml up --build
+#
+# Ne pas utiliser avec Docker Compose, qui ne reconnaît pas `keep-id`.
+services:
+  backend:
+    userns_mode: keep-id
+  frontend:
+    userns_mode: keep-id

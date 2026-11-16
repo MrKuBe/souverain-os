@@ -45,8 +45,11 @@ souverain-os/
 ├── AGENTS.md                 # Ce contrat de maintenance
 ├── LICENSE                   # GPL-3.0-or-later
 ├── README.md
+├── VERSION                   # Source unique de version (vX.Y.Z)
 ├── .env.example
+├── .dockerignore
 ├── compose.yaml              # Orchestration Podman/Docker (dev hot-reload)
+├── compose.rootless.yaml     # Override Podman rootless (userns_mode: keep-id)
 ├── backend/
 │   ├── Containerfile         # Image OCI production
 │   ├── requirements.txt
@@ -57,7 +60,8 @@ souverain-os/
 │   │   ├── core/
 │   │   │   ├── config.py     # Pydantic Settings (.env)
 │   │   │   ├── database.py   # Engine SQLModel + session
-│   │   │   └── security.py   # Argon2, JWT, cookies, CSRF, chiffrement Fernet
+│   │   │   ├── security.py   # Argon2, JWT, cookies, CSRF, chiffrement Fernet
+│   │   │   └── version.py    # Lecture/validation de VERSION
 │   │   ├── models/           # Tables SQLModel
 │   │   ├── schemas/          # Contrats Pydantic v2 (entrée/sortie)
 │   │   ├── services/
@@ -70,12 +74,15 @@ souverain-os/
 │   │       ├── deps.py       # Dépendances auth, RBAC, CSRF, accès audit
 │   │       └── routes/       # auth, audits, applications, dashboard, import,
 │   │                         # simulation, exports, admin
-│   └── tests/                # Tests unitaires (scoring, importers)
-└── frontend/                 # Généré après validation du backend
+│   └── tests/                # Tests unitaires (scoring, importers, version, exports)
+└── frontend/                 # Next.js App Router autonome (Node.js 22+)
     ├── Containerfile         # multi-stage dev + production standalone
     ├── next.config.mjs
-    ├── app/
-    └── ...
+    ├── scripts/              # Synchronisation/contrôle de version
+    ├── app/                  # accueil, audits/[id]/{dashboard,cartographie,simulation}, admin
+    ├── components/           # ui, auth, layout, dashboard, cartographie, simulation,
+    │                         # méthodologie, admin
+    └── lib/                  # API SSR/navigateur, types, labels, critères, méthodologie
 ```
 
 **Séparation stricte :**
@@ -92,7 +99,7 @@ souverain-os/
 
 | Couche | Technologie | Contraintes |
 |---|---|---|
-| Frontend | Next.js App Router, TypeScript strict, Tailwind CSS | `output: 'standalone'`, images `unoptimized`, aucune dépendance Vercel. Icônes `lucide-react`, graphiques `recharts` uniquement. |
+| Frontend | Next.js App Router, TypeScript strict, Tailwind CSS, Node.js 22+ | `output: 'standalone'`, images `unoptimized`, aucune dépendance Vercel. Icônes `lucide-react`, graphiques `recharts` uniquement. |
 | Backend | Python 3.12+, FastAPI, Pydantic v2, SQLModel | Typage systématique, OpenAPI exposé sur `/docs` avec Swagger UI auto-hébergé (sans CDN). ReDoc désactivé. |
 | Base | PostgreSQL 16 | Initialisation automatique + seed idempotent. |
 | Conteneurs | OCI (Podman/Docker) | Dev : volumes sources + hot-reload. Prod : images autonomes non-root. |
@@ -264,6 +271,19 @@ Tri décroissant par score unitaire, puis par criticité, puis par nom. Maximum 
 Le « risque principal » est le critère C1–C4 le plus élevé (en cas d'égalité, l'ordre
 C2 juridiction, C1 licence, C4 MCO, C3 interopérabilité).
 
+### 6.8 Transparence méthodologique dans l'interface
+
+Le frontend expose une fiche « Méthodologie & Sources » et des tooltips contextuels sur le
+dashboard, la cartographie, le formulaire de brique et la simulation. Les contenus sont
+centralisés dans `frontend/lib/methodology.ts` et ne doivent pas dupliquer la logique de
+calcul : formules, seuils et sources sont descriptifs, les valeurs restent calculées par
+`scoring.py`.
+
+Références affichées : SILL/DINUM, FLOSS Criteria, EU Score, IRN/aDRI 2026,
+CLOUD Act/FISA, CI-SIS/ANS, HL7 FHIR, DICOM, HPRIM, SQL standard, MaturiN-H, CaRE/HAS,
+DICP et `security_need_a` Mercator. Les tooltips doivent rester accessibles au clavier et
+ne chargent aucune ressource distante.
+
 ---
 
 ## 7. Mapping d'import — RÈGLES OFFICIELLES
@@ -372,15 +392,32 @@ et comptés dans le rapport. Un import ne supprime jamais de brique existante.
 - Tests : `pytest`, fonctions pures privilégiées. Lancer `ruff check app tests` et `pytest`.
 - Ne pas créer de table ou de champ sans mettre à jour ce document et le seed si pertinent.
 
-### Frontend (à venir)
+### Frontend
 
 - TypeScript `strict`, pas de `any`, composants serveur par défaut, client uniquement si
   interaction (simulateur, formulaires, thème).
 - Aucun appel direct à un service tiers ; toutes les données passent par l'API SouverainOS.
 - Identité visuelle sobre, accessible (contrastes AA), responsive, thème clair/sombre.
 - Mentions obligatoires : en-tête « SouverainOS — Audit de Dépendance Numérique des SIH »,
-  bandeau de contexte, footer « Conçu par Bertrand Kuzbinski — Développé en Vibecoding
-  (Full-Stack Open Source) ».
+  bandeau de contexte. Footer exact :
+  `SouverainOS vX.Y.Z — Conçu par Bertrand Kuzbinski (Vibecoding — Full-Stack Open Source)`,
+  où `X.Y.Z` provient exclusivement de `VERSION`.
+- Les composants de méthodologie ne chargent aucune ressource distante et respectent
+  l'accessibilité clavier (focus, Escape, fermeture hors zone).
+
+### Versioning et releases
+
+- `VERSION` à la racine est l'unique source de version, format strict `vMAJOR.MINOR.PATCH`.
+- La version est exposée par `/healthz`, `/docs` (OpenAPI), les exports JSON/Markdown/CSV,
+  `frontend/package.json`, `frontend/package-lock.json` et le footer.
+- `npm run version:sync` aligne les manifests frontend ; `npm run version:check` échoue si
+  `VERSION` et les manifests divergent. Le build exécute ce contrôle via `prebuild`.
+- Convention : `v0.x.y` pendant le développement, `v1.0.0` pour la soutenance.
+- Chaque release utilise un **tag Git annoté** (`git tag -a vX.Y.Z -m "..."`), jamais un
+  tag léger. Un tag publié n'est jamais déplacé : incrémenter la version.
+- Les contextes Docker sont la racine du dépôt afin que `VERSION` soit inclus dans les
+  images backend et frontend. `VERSION` est copié dans `/etc/souverainos/VERSION`, hors
+  des volumes de sources : un changement de version impose de reconstruire les images.
 
 ---
 
@@ -392,9 +429,14 @@ et comptés dans le rapport. Un import ne supprime jamais de brique existante.
 cp .env.example .env
 # éditer les secrets
 podman compose up --build        # ou docker compose up --build
+# Podman rootless : ajouter -f compose.rootless.yaml
 # Frontend : http://localhost:3000
 # API/docs  : http://localhost:8000/docs
 ```
+
+SELinux : les volumes de sources utilisent `:Z` (label privé). L'override
+`compose.rootless.yaml` applique `userns_mode: keep-id` sous Podman uniquement ; ne pas
+désactiver SELinux et ne pas utiliser `--privileged` pour contourner un problème de droits.
 
 ### Vérifications backend
 
@@ -406,9 +448,27 @@ ruff check app tests
 pytest -q
 ```
 
+### Vérifications frontend
+
+Node.js 22+ est requis (Tailwind CSS 4). Le build échoue sous Node 20.18.
+
+```bash
+cd frontend
+npm ci
+npm run version:check
+npm run typecheck
+npm run build
+```
+
 ### Production
 
-- Builder les images sans le montage des sources (cibles finales des Containerfiles).
+- Builder les images sans le montage des sources (cibles finales des Containerfiles) avec
+  la racine du dépôt comme contexte afin d'inclure `VERSION` :
+  `podman build -f backend/Containerfile -t souverainos-backend .` et
+  `podman build --target runner -f frontend/Containerfile ... .`
+- Frontend : builder la cible `runner` avec l'URL publique de l'API
+  (`--build-arg NEXT_PUBLIC_API_URL=https://api.example.fr`), puis fournir au runtime
+  `API_INTERNAL_URL` pour les appels SSR internes ; le CSP est figé au build.
 - Servir exclusivement en HTTPS (reverse proxy open source : Caddy, Traefik, Nginx).
 - `COOKIE_SECURE=true`, `ENVIRONMENT=production`, `SEED_ON_STARTUP=false` après le premier
   déploiement, `SECRET_KEY` fort et sauvegardé, secrets dans un gestionnaire interne.
@@ -423,8 +483,12 @@ pytest -q
 ## 10. Definition of Done d'une évolution
 
 1. La logique métier reste dans `scoring.py` / `importers.py` ; aucune duplication.
-2. Les tests unitaires couvrent la nouvelle règle (score, mapping, sécurité).
-3. `ruff check` et `pytest` passent.
+2. Les tests unitaires couvrent la nouvelle règle (score, mapping, sécurité, version).
+3. `ruff check`, `pytest`, `npm run version:check`, `npm run typecheck` et `npm run build`
+   passent.
 4. Aucun identifiant, token ou donnée patient dans les fixtures ou les logs.
-5. Ce document est mis à jour si une règle métier, de sécurité ou d'import change.
+5. Ce document est mis à jour si une règle métier, de sécurité, d'import ou de versioning
+   change.
 6. Le cloisonnement Démo / Réel et le mode lecture seule de la démo sont vérifiés.
+7. La fiche « Méthodologie & Sources », les tooltips et le footer restent synchronisés avec
+   `VERSION` et les sources documentées.

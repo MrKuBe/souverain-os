@@ -2,8 +2,10 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import model_validator
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from app.core.version import get_app_version
 
 DEFAULT_SECRET_KEY = "change-me-with-a-long-random-secret-before-any-real-use"
 DEFAULT_ADMIN_PASSWORD = "change-me-admin-password-12-caracteres-minimum"
@@ -18,7 +20,7 @@ class Settings(BaseSettings):
     )
 
     app_name: str = "SouverainOS API — Auteur : Bertrand Kuzbinski"
-    app_version: str = "0.1.0"
+    app_version: str = Field(default_factory=get_app_version)
     environment: Literal["development", "production", "test"] = "development"
     api_prefix: str = "/api"
     log_level: str = "INFO"

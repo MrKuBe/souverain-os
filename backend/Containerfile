@@ -1,5 +1,6 @@
 # SouverainOS — image backend OCI (production et dev hot-reload).
-# Build production : podman build -t souverainos-backend ./backend
+# Build production (contexte racine pour inclure VERSION) :
+#   podman build -f backend/Containerfile -t souverainos-backend .
 # En dev, compose.yaml monte ./backend sur /app et remplace la commande
 # par uvicorn --reload ; les dépendances restent installées dans l'image.
 
@@ -15,10 +16,11 @@ WORKDIR /app
 RUN groupadd --system --gid 10001 app \
     && useradd --system --uid 10001 --gid app --home-dir /app --no-create-home app
 
-COPY requirements.txt ./
+COPY backend/requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY app ./app
+COPY backend/app ./app
+COPY VERSION /etc/souverainos/VERSION
 
 RUN chown -R app:app /app
 

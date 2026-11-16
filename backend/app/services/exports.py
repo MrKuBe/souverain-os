@@ -8,6 +8,7 @@ from dataclasses import asdict
 from datetime import UTC, datetime
 from typing import Literal
 
+from app.core.version import get_app_version
 from app.models.audit import ApplicationBrick, Audit
 from app.services.scoring import (
     LAYER_LABELS,
@@ -71,6 +72,7 @@ def build_json_export(
         "title": "Audit de Dépendance Numérique des SIH",
         "author": "Bertrand Kuzbinski",
         "credit": AUTHOR_CREDIT,
+        "version": get_app_version(),
         "generated_at": _now_iso(),
         "generated_by": generated_by or "anonyme",
         "audit": _audit_payload(audit),
@@ -139,6 +141,7 @@ def build_markdown_export(
         f"- **GHT :** {_md_escape(audit.ght_name)}",
         f"- **Contexte :** {context}",
         f"- **Établissements :** {_md_escape(', '.join(audit.establishments))}",
+        f"- **Version :** {get_app_version()}",
         f"- **Date d'export :** {_now_iso()}",
         f"- **Exporté par :** {_md_escape(generated_by or 'anonyme')}",
         f"- **Score global :** **{report.global_score:.2f}/100** — "
@@ -253,7 +256,7 @@ def build_markdown_export(
             "",
             f"*{AUTHOR_CREDIT}*",
             "",
-            f"*Rapport généré par SouverainOS le {_now_iso()}.*",
+            f"*Rapport généré par SouverainOS v{get_app_version()} le {_now_iso()}.*",
             "",
         ]
     )
@@ -278,6 +281,7 @@ def build_csv_export(
             "Démonstration publique" if audit.is_demo else "Audit privé GHT",
         ]
     )
+    writer.writerow(["# Version", get_app_version()])
     writer.writerow(["# Date", _now_iso()])
     writer.writerow(["# Exporté par", generated_by or "anonyme"])
     writer.writerow(

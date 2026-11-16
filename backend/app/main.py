@@ -172,7 +172,7 @@ def healthz() -> JSONResponse:
 def custom_swagger_ui():
     return get_swagger_ui_html(
         openapi_url=app.openapi_url,
-        title=f"{settings.app_name} — Documentation",
+        title=f"{settings.app_name} v{settings.app_version} — Documentation",
         swagger_js_url="/static/swagger-ui/swagger-ui-bundle.js",
         swagger_css_url="/static/swagger-ui/swagger-ui.css",
         swagger_favicon_url="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg'/>",

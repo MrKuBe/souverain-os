@@ -1,28 +1,29 @@
 # SouverainOS — image frontend OCI.
 # Cible `dev` : hot-reload, utilisée par compose.yaml.
 # Cible `runner` : production Next.js standalone, sans aucune dépendance Vercel.
-# Build production :
-#   podman build --target runner \
+# Build production (contexte racine pour inclure VERSION) :
+#   podman build --target runner -f frontend/Containerfile \
 #     --build-arg NEXT_PUBLIC_API_URL=https://souverainos.example.fr \
-#     -t souverainos-frontend ./frontend
+#     -t souverainos-frontend .
 
-FROM node:20-alpine AS base
+FROM node:22-alpine AS base
 RUN apk add --no-cache libc6-compat
+COPY VERSION /etc/souverainos/VERSION
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
 
 FROM base AS deps
-COPY package.json package-lock.json* ./
+COPY frontend/package.json frontend/package-lock.json* ./
 RUN if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi
 
 FROM deps AS dev
-COPY . .
+COPY frontend/ ./
 EXPOSE 3000
 CMD ["npm", "run", "dev"]
 
 FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
-COPY . .
+COPY frontend/ ./
 ARG NEXT_PUBLIC_API_URL=http://localhost:8000
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL} \
     NODE_ENV=production
