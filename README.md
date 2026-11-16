@@ -32,6 +32,15 @@ centralisé et une documentation d'exploitation Podman rootless/SELinux renforc�
   par les tests.
 - Références et méthode consultables directement dans l'application, sans ressource
   distante.
+- Signalement privé des vulnérabilités via la politique [`SECURITY.md`](./SECURITY.md).
+
+### Données de démonstration et marques
+
+Les audits de démonstration (`is_demo=true`), leurs établissements et leurs applications
+sont fictifs et ne contiennent aucune donnée patient réelle. Les noms de produits et marques
+cités restent la propriété de leurs titulaires et servent uniquement à illustrer la méthode
+d'analyse. Aucun résultat de démonstration ne constitue une évaluation officielle d'un
+fournisseur.
 
 ## Démarrage (développement, hot-reload)
 
