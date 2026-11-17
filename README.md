@@ -87,6 +87,147 @@ Podman : Docker Compose ne reconnaît pas `keep-id`. En cas d'erreur de permissi
 volume, vérifier d'abord le label `:Z`, les droits du répertoire et l'UID du processus,
 sans recourir à `--privileged`.
 
+## Configuration LDAP / Active Directory / FreeIPA
+
+L'annuaire se configure **exclusivement côté serveur**, dans le fichier `.env` à la racine
+du projet (ou via les variables d'environnement du déploiement). Il n'existe volontairement
+pas d'écran d'administration LDAP : le mot de passe du compte de service reste hors de la
+base et n'est jamais exposé par l'API. Après modification, recréer le backend pour recharger
+la configuration :
+
+```bash
+podman compose up -d --force-recreate backend
+```
+
+### Modes d'authentification
+
+| `AUTH_MODE` | Comportement |
+|---|---|
+| `local` | Comptes locaux Argon2 uniquement ; LDAP ignoré. |
+| `ldap` | Annuaire uniquement ; un identifiant en collision avec un compte local est refusé. |
+| `hybrid` | Défaut. Un compte local existant garde la priorité absolue ; sinon l'annuaire est sollicité si `AUTH_ALLOW_LDAP_FALLBACK=true`. |
+
+En mode `hybrid`, aucun repli LDAP n'est tenté pour un identifiant local existant, même si
+le mot de passe local est faux. En mode `ldap`, l'administrateur local initial n'est plus
+utilisable : conserver un accès de secours ou revenir temporairement à `AUTH_MODE=local`.
+`AUTH_ALLOW_LDAP_FALLBACK` n'a d'effet qu'en mode `hybrid`.
+
+### Procédure de mise en service
+
+1. **Créer un compte de service** en lecture seule sur la branche LDAP concernée. Ce compte
+   sert uniquement à rechercher l'utilisateur et ses groupes ; SouverainOS teste ensuite le
+   mot de passe de l'utilisateur par un second bind.
+2. **Renseigner les paramètres** dans `.env`, avec des DN complets et un filtre contenant
+   obligatoirement `{username}`. Le login est échappé contre l'injection LDAP avant
+   substitution.
+3. **Protéger le fichier** : `chmod 600 .env`, ne jamais le versionner, et en production
+   utiliser le gestionnaire de secrets de l'infrastructure.
+4. **Recréer le backend** avec la commande ci-dessus, puis se connecter via l'onglet
+   **Annuaire LDAP** de la fenêtre de connexion.
+5. **Vérifier le rôle** obtenu. À la première connexion, un utilisateur LDAP est créé dans
+   la table `users` avec `auth_source=ldap` et sans mot de passe local. Les connexions
+   suivantes actualisent son email, son nom et son rôle depuis l'annuaire ; un compte
+   désactivé dans SouverainOS reste refusé.
+
+### Exemple Active Directory
+
+```dotenv
+AUTH_MODE=hybrid
+AUTH_ALLOW_LDAP_FALLBACK=true
+
+LDAP_SERVER_URL=ldaps://ad.example.local:636
+LDAP_USE_SSL=true
+LDAP_TLS_VALIDATE=true
+LDAP_CA_CERT_FILE=
+LDAP_BASE_DN=DC=example,DC=local
+LDAP_BIND_DN=CN=souverainos,OU=Services,DC=example,DC=local
+LDAP_BIND_PASSWORD=mot-de-passe-du-compte-de-service
+
+LDAP_USER_FILTER=(sAMAccountName={username})
+LDAP_ATTRIBUTE_UID=sAMAccountName
+LDAP_ATTRIBUTE_EMAIL=mail
+LDAP_ATTRIBUTE_DISPLAY_NAME=displayName
+LDAP_ATTRIBUTE_MEMBEROF=memberOf
+
+LDAP_ADMIN_GROUP_DN=CN=SouverainOS-Admins,OU=Groupes,DC=example,DC=local
+LDAP_AUDITEUR_GROUP_DN=CN=SouverainOS-Auditeurs,OU=Groupes,DC=example,DC=local
+LDAP_LECTEUR_GROUP_DN=CN=SouverainOS-Lecteurs,OU=Groupes,DC=example,DC=local
+LDAP_DEFAULT_ROLE=lecteur_direction
+LDAP_TIMEOUT_SECONDS=8
+```
+
+### Variantes OpenLDAP et FreeIPA
+
+```dotenv
+# OpenLDAP
+LDAP_USER_FILTER=(uid={username})
+LDAP_ATTRIBUTE_UID=uid
+LDAP_ATTRIBUTE_EMAIL=mail
+LDAP_ATTRIBUTE_DISPLAY_NAME=cn
+LDAP_ATTRIBUTE_MEMBEROF=memberOf
+
+# FreeIPA (mêmes conventions usuelles)
+LDAP_USER_FILTER=(uid={username})
+LDAP_ATTRIBUTE_UID=uid
+LDAP_ATTRIBUTE_EMAIL=mail
+LDAP_ATTRIBUTE_DISPLAY_NAME=cn
+LDAP_ATTRIBUTE_MEMBEROF=memberOf
+```
+
+La recherche doit retourner **exactement une entrée** dans `LDAP_BASE_DN` ; zéro ou
+plusieurs résultats sont refusés. `LDAP_ATTRIBUTE_MEMBEROF` doit être présent sur l'entrée
+utilisateur (overlay `memberOf` pour OpenLDAP, plugin équivalent pour FreeIPA). Les groupes
+sont comparés par DN complet, avec repli sur le `cn` ; utiliser des DN complets évite les
+ambiguïtés entre groupes de même nom.
+
+### Résolution des rôles
+
+L'ordre de priorité est strict :
+
+1. `LDAP_ADMIN_GROUP_DN` → `admin_ght` ;
+2. `LDAP_AUDITEUR_GROUP_DN` → `auditeur` ;
+3. `LDAP_LECTEUR_GROUP_DN` → `lecteur_direction` ;
+4. sinon `LDAP_DEFAULT_ROLE`.
+
+Le rôle est recalculé à chaque connexion LDAP réussie. Un utilisateur sans groupe reconnu
+reçoit donc le rôle par défaut, `lecteur_direction` dans l'exemple.
+
+### TLS et CA interne
+
+Utiliser `ldaps://` (port 636) ou `LDAP_USE_SSL=true`. `LDAP_TLS_VALIDATE=true` est
+obligatoire en production ; ne le passer à `false` que pour un laboratoire isolé. Pour une
+autorité de certification interne, monter le PEM dans le conteneur backend et référencer
+son chemin interne :
+
+```yaml
+# compose.override.yaml — exemple de montage du CA interne
+services:
+  backend:
+    volumes:
+      - ./certs/ca-interne.pem:/etc/ssl/certs/ca-interne.pem:ro,Z
+```
+
+```dotenv
+LDAP_CA_CERT_FILE=/etc/ssl/certs/ca-interne.pem
+```
+
+LDAPS en SSL direct est pris en charge ; **StartTLS sur le port 389 n'est pas implémenté**.
+
+### Diagnostic
+
+- **« Annuaire d'authentification indisponible »** : vérifier l'URL, le port, le certificat,
+  le CA interne, le compte de bind et l'accessibilité réseau depuis le conteneur backend.
+- **« Identifiants invalides »** : vérifier `LDAP_BASE_DN`, `LDAP_USER_FILTER`, l'unicité de
+  l'entrée et le bind utilisateur.
+- **Rôle inattendu** : vérifier la présence de `memberOf` sur l'entrée, les DN de groupes et
+  l'ordre de priorité ci-dessus.
+- **Compte local bloquant le LDAP en mode `hybrid`** : utiliser un autre identifiant ou
+  passer temporairement en mode `ldap` pour le test.
+
+Pour revenir à une authentification strictement locale, définir `AUTH_MODE=local` et
+recréer le backend. Les comptes LDAP déjà synchronisés restent en base mais ne disposent
+d'aucun mot de passe local et ne peuvent donc plus se connecter.
+
 ## Méthodologie de score et sources
 
 La logique officielle est implémentée **uniquement** dans
